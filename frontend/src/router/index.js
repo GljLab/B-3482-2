@@ -29,6 +29,12 @@ const routes = [
         meta: { requiresAuth: true }
       },
       {
+        path: 'materials/:id',
+        name: 'material-detail',
+        component: () => import('../views/MaterialDetailView.vue'),
+        meta: { requiresAuth: true }
+      },
+      {
         path: 'collections',
         name: 'collections',
         component: () => import('../views/CollectionsView.vue'),
@@ -44,6 +50,24 @@ const routes = [
         path: 'projects',
         name: 'projects',
         component: () => import('../views/ProjectsView.vue'),
+        meta: { requiresAuth: true }
+      },
+      {
+        path: 'projects/:id/detail',
+        name: 'project-detail',
+        component: () => import('../views/ProjectDetailView.vue'),
+        meta: { requiresAuth: true }
+      },
+      {
+        path: 'analytics',
+        name: 'analytics',
+        component: () => import('../views/AnalyticsView.vue'),
+        meta: { requiresAuth: true }
+      },
+      {
+        path: 'recycle-bin',
+        name: 'recycle-bin',
+        component: () => import('../views/RecycleBinView.vue'),
         meta: { requiresAuth: true }
       },
       {

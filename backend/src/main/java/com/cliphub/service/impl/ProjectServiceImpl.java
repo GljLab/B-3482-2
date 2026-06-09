@@ -13,6 +13,7 @@ import com.cliphub.service.AuditLogService;
 import com.cliphub.service.ProjectService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,6 +38,8 @@ public class ProjectServiceImpl implements ProjectService {
     private final UserMapper userMapper;
     private final AuditLogService auditLogService;
     private final CollectionMaterialRelMapper collectionMaterialRelMapper;
+    @Lazy
+    private final TraceabilityServiceImpl traceabilitySvc;
 
     @Value("${app.storage.root}")
     private String storageRoot;
@@ -73,6 +76,8 @@ public class ProjectServiceImpl implements ProjectService {
 
         project.setCurrentVersionId(initVersion.getId());
         projectMapper.updateById(project);
+
+        traceabilitySvc.saveVersionMaterialSnapshot(initVersion.getId(), project.getId());
 
         auditLogService.log(principal, "CREATE_PROJECT", "PROJECT", String.valueOf(project.getId()), "创建项目");
         return projectToMap(project);
@@ -124,6 +129,8 @@ public class ProjectServiceImpl implements ProjectService {
         project.setCurrentVersionId(version.getId());
         project.setUpdatedAt(LocalDateTime.now());
         projectMapper.updateById(project);
+
+        traceabilitySvc.saveVersionMaterialSnapshot(version.getId(), projectId);
 
         auditLogService.log(principal, "SAVE_PROJECT_VERSION", "PROJECT", String.valueOf(projectId),
                 "保存版本: " + request.getVersionName());
@@ -297,9 +304,16 @@ public class ProjectServiceImpl implements ProjectService {
             relation.setProjectId(projectId);
             relation.setMaterialId(materialId);
             relation.setCreatedAt(LocalDateTime.now());
+            relation.setAddedBy(principal.getId());
+            relation.setAddedAt(LocalDateTime.now());
+            relation.setSourceType("DIRECT_BIND");
+            relation.setMaterialOwnerId(material.getOwnerId());
+            relation.setMaterialStatus("ACTIVE");
             projectMaterialRelMapper.insert(relation);
             auditLogService.log(principal, "BIND_PROJECT_MATERIAL", "PROJECT", String.valueOf(projectId),
                     "绑定素材: " + materialId);
+            traceabilitySvc.logTrail(materialId, principal, "BIND_TO_PROJECT", "PROJECT_USAGE", "PROJECT", String.valueOf(projectId), project.getName(), null, null);
+            traceabilitySvc.updateMaterialCounters(materialId);
         }
 
         return Map.of("projectId", projectId, "materialId", materialId, "bound", true);
@@ -315,6 +329,7 @@ public class ProjectServiceImpl implements ProjectService {
                 new LambdaQueryWrapper<CollectionMaterialRel>()
                         .eq(CollectionMaterialRel::getCollectionId, collectionId));
 
+        List<Long> newlyBoundMaterialIds = new ArrayList<>();
         int boundCount = 0;
         for (CollectionMaterialRel rel : rels) {
             Material material = materialMapper.selectById(rel.getMaterialId());
@@ -331,7 +346,14 @@ public class ProjectServiceImpl implements ProjectService {
                 relation.setProjectId(projectId);
                 relation.setMaterialId(rel.getMaterialId());
                 relation.setCreatedAt(LocalDateTime.now());
+                relation.setAddedBy(principal.getId());
+                relation.setAddedAt(LocalDateTime.now());
+                relation.setSourceType("COLLECTION_IMPORT");
+                relation.setSourceNote("从素材集" + collectionId + "导入");
+                relation.setMaterialOwnerId(material.getOwnerId());
+                relation.setMaterialStatus("ACTIVE");
                 projectMaterialRelMapper.insert(relation);
+                newlyBoundMaterialIds.add(rel.getMaterialId());
                 boundCount++;
             }
         }
@@ -341,6 +363,11 @@ public class ProjectServiceImpl implements ProjectService {
 
         auditLogService.log(principal, "IMPORT_COLLECTION_TO_PROJECT", "PROJECT", String.valueOf(projectId),
                 "从素材集 " + collectionId + " 导入 " + boundCount + " 个素材");
+
+        for (Long mid : newlyBoundMaterialIds) {
+            traceabilitySvc.updateMaterialCounters(mid);
+            traceabilitySvc.logTrail(mid, principal, "IMPORT_FROM_COLLECTION", "PROJECT_USAGE", "PROJECT", String.valueOf(projectId), project.getName(), null, null);
+        }
 
         return Map.of("projectId", projectId, "collectionId", collectionId, "boundCount", boundCount);
     }

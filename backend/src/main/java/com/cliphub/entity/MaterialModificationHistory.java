@@ -8,16 +8,16 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("collection_material_rel")
-public class CollectionMaterialRel {
+@TableName("material_modification_histories")
+public class MaterialModificationHistory {
 
     @TableId(type = IdType.AUTO)
     private Long id;
-    private Long collectionId;
     private Long materialId;
-    private Integer sortOrder;
-    private String note;
-    private Long addedBy;
-    private LocalDateTime addedAt;
+    private Long userId;
+    private String username;
+    private String fieldName;
+    private String oldValue;
+    private String newValue;
     private LocalDateTime createdAt;
 }

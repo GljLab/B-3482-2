@@ -11,6 +11,7 @@ import com.cliphub.security.UserPrincipal;
 import com.cliphub.service.AuditLogService;
 import com.cliphub.service.CollectionService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +34,8 @@ public class CollectionServiceImpl implements CollectionService {
     private final MaterialTagRelMapper materialTagRelMapper;
     private final FavoriteMapper favoriteMapper;
     private final AuditLogService auditLogService;
+    @Lazy
+    private final TraceabilityServiceImpl traceabilitySvc;
 
     @Override
     @Transactional
@@ -207,6 +210,8 @@ public class CollectionServiceImpl implements CollectionService {
             rel.setMaterialId(materialId);
             rel.setSortOrder(maxSort + 1);
             rel.setNote(note == null ? "" : note);
+            rel.setAddedBy(principal.getId());
+            rel.setAddedAt(LocalDateTime.now());
             rel.setCreatedAt(LocalDateTime.now());
             collectionMaterialRelMapper.insert(rel);
         } else {
@@ -239,6 +244,9 @@ public class CollectionServiceImpl implements CollectionService {
             }
         }
 
+        traceabilitySvc.logTrail(materialId, principal, "ADD_TO_COLLECTION", "COLLECTION_USAGE", "COLLECTION", String.valueOf(collectionId), collection.getName(), null, null);
+        traceabilitySvc.updateMaterialCounters(materialId);
+
         return Map.of("collectionId", collectionId, "materialId", materialId, "added", true);
     }
 
@@ -270,6 +278,9 @@ public class CollectionServiceImpl implements CollectionService {
 
         auditLogService.log(principal, "REMOVE_COLLECTION_MATERIAL", "COLLECTION", String.valueOf(collectionId),
                 "素材 " + materialId + " 移出素材集");
+
+        traceabilitySvc.logTrail(materialId, principal, "REMOVE_FROM_COLLECTION", "COLLECTION_USAGE", "COLLECTION", String.valueOf(collectionId), collection.getName(), null, null);
+        traceabilitySvc.updateMaterialCounters(materialId);
     }
 
     @Override
@@ -362,6 +373,8 @@ public class CollectionServiceImpl implements CollectionService {
                 newRel.setMaterialId(materialId);
                 newRel.setSortOrder(maxSort + 1);
                 newRel.setNote("");
+                newRel.setAddedBy(principal.getId());
+                newRel.setAddedAt(LocalDateTime.now());
                 newRel.setCreatedAt(LocalDateTime.now());
                 collectionMaterialRelMapper.insert(newRel);
                 col.setUpdatedAt(LocalDateTime.now());

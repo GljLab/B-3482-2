@@ -30,6 +30,18 @@ public class Material {
     private Long downloadCount;
     private Long favoriteCount;
     private Long shareCount;
+    private Long projectUsageCount;
+    private Long collectionUsageCount;
+    private String sourceType;
+    private String sourceNote;
+    private String ownershipType;
+    private Long departmentId;
+    private Integer isDeleted;
+    private Long deletedBy;
+    private LocalDateTime deletedAt;
+    private LocalDateTime recycleExpireAt;
+    private String originalTitle;
+    private String originalPreviewPath;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

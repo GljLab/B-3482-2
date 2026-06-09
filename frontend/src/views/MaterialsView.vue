@@ -1,9 +1,13 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import dayjs from 'dayjs';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { UploadFilled } from '@element-plus/icons-vue';
+import { UploadFilled, Film, Collection } from '@element-plus/icons-vue';
 import http from '../api/http';
+import traceApi from '../api/traceability';
+
+const router = useRouter();
 
 const loading = ref(false);
 const materials = ref([]);
@@ -209,9 +213,49 @@ const submitEdit = async () => {
   }
 };
 
+const deleteImpactDialog = ref(false);
+const deleteImpactData = ref(null);
+const deleteTargetId = ref(null);
+const deleteStrategy = ref('RECYCLE');
+const deleteNotify = ref(false);
+
+const openDetail = (row) => {
+  router.push(`/materials/${row.id}/detail`);
+};
+
+const safeDeleteMaterial = async (row) => {
+  deleteTargetId.value = row.id;
+  try {
+    const res = await traceApi.getDeleteImpact(row.id);
+    deleteImpactData.value = res?.data;
+    deleteImpactDialog.value = true;
+    deleteStrategy.value = 'RECYCLE';
+    deleteNotify.value = false;
+  } catch (e) {
+    await ElMessageBox.confirm('获取影响范围失败，将直接删除。是否继续？', '删除确认', { type: 'warning' });
+    await http.delete(`/materials/${deleteTargetId.value}?force=true`);
+    ElMessage.success('素材已删除');
+    await loadMaterials();
+  }
+};
+
+const confirmDeleteWithStrategy = async () => {
+  try {
+    await traceApi.deleteWithStrategy(deleteTargetId.value, {
+      strategy: deleteStrategy.value,
+      notifyUsers: deleteNotify.value
+    });
+    ElMessage.success(deleteStrategy.value === 'FORCE_DELETE' ? '素材已永久删除' : '素材已移入回收站');
+    deleteImpactDialog.value = false;
+    await loadMaterials();
+  } catch (e) {
+    // error handled by interceptor
+  }
+};
+
 const deleteMaterial = async (id) => {
   await ElMessageBox.confirm('删除后无法恢复，是否继续？', '删除确认', { type: 'warning' });
-  await http.delete(`/materials/${id}`);
+  await http.delete(`/materials/${id}?force=true`);
   ElMessage.success('素材已删除');
   await loadMaterials();
 };
@@ -444,16 +488,17 @@ onMounted(async () => {
             </el-space>
           </template>
         </el-table-column>
-        <el-table-column label="操作" min-width="260">
+        <el-table-column label="操作" min-width="320">
           <template #default="{ row }">
             <el-space wrap>
+              <el-button size="small" type="primary" plain @click="openDetail(row)">详情溯源</el-button>
               <el-button size="small" plain @click="previewMaterial(row)">预览</el-button>
               <el-button size="small" plain @click="downloadMaterial(row)">下载</el-button>
               <el-button size="small" plain @click="toggleFavorite(row.id)">快速收藏</el-button>
               <el-button size="small" plain @click="openCollectionPanel(row)">加入素材集</el-button>
               <el-button size="small" plain @click="createShare(row.id)">分享</el-button>
               <el-button size="small" plain @click="openEdit(row)">编辑</el-button>
-              <el-button size="small" type="danger" plain @click="deleteMaterial(row.id)">删除</el-button>
+              <el-button size="small" type="danger" plain @click="safeDeleteMaterial(row)">删除</el-button>
             </el-space>
           </template>
         </el-table-column>
@@ -547,6 +592,60 @@ onMounted(async () => {
         <audio v-else-if="previewState.type === 'AUDIO'" :src="previewState.url" controls style="width: 100%" />
         <el-input v-else type="textarea" :rows="10" :model-value="previewState.url" disabled />
       </div>
+    </el-dialog>
+
+    <el-dialog v-model="deleteImpactDialog" title="删除影响评估" width="min(680px, 92vw)">
+      <div v-if="deleteImpactData" class="delete-impact-content">
+        <el-alert
+          :title="deleteImpactData.canSafelyDelete ? '该素材无外部引用，可以安全删除' : `该素材正在被 ${deleteImpactData.projectCount} 个项目、${deleteImpactData.collectionCount} 个素材集使用，被 ${deleteImpactData.favoriteCount} 人收藏`"
+          :type="deleteImpactData.canSafelyDelete ? 'success' : (deleteImpactData.projectCount > 0 ? 'error' : 'warning')"
+          :closable="false"
+          show-icon
+          style="margin-bottom: 1rem"
+        />
+        <el-descriptions :column="2" border size="small" style="margin-bottom: 1rem">
+          <el-descriptions-item label="素材ID">{{ deleteImpactData.materialId }}</el-descriptions-item>
+          <el-descriptions-item label="素材标题">{{ deleteImpactData.materialTitle }}</el-descriptions-item>
+          <el-descriptions-item label="影响项目数" :content-style="{ color: deleteImpactData.projectCount > 0 ? '#f56c6c' : '' }">{{ deleteImpactData.projectCount }}</el-descriptions-item>
+          <el-descriptions-item label="影响素材集数">{{ deleteImpactData.collectionCount }}</el-descriptions-item>
+          <el-descriptions-item label="收藏用户数">{{ deleteImpactData.favoriteCount }}</el-descriptions-item>
+          <el-descriptions-item label="受影响用户数">{{ deleteImpactData.affectedUserCount }}</el-descriptions-item>
+        </el-descriptions>
+        <div v-if="deleteImpactData.affectedProjects && deleteImpactData.affectedProjects.length > 0" class="affected-list">
+          <h4>受影响的项目（{{ deleteImpactData.affectedProjects.length }}）</h4>
+          <div class="affected-scroll">
+            <div v-for="p in deleteImpactData.affectedProjects" :key="p.projectId" class="affected-item">
+              <el-icon><Film /></el-icon>
+              <span class="affected-name">{{ p.projectName }}</span>
+              <el-tag size="small">{{ p.ownerName }}</el-tag>
+            </div>
+          </div>
+        </div>
+        <div v-if="deleteImpactData.affectedCollections && deleteImpactData.affectedCollections.length > 0" class="affected-list">
+          <h4>受影响的素材集（{{ deleteImpactData.affectedCollections.length }}）</h4>
+          <div class="affected-scroll">
+            <div v-for="c in deleteImpactData.affectedCollections" :key="c.collectionId" class="affected-item">
+              <el-icon><Collection /></el-icon>
+              <span class="affected-name">{{ c.collectionName }}</span>
+              <el-tag size="small">{{ c.ownerName }}</el-tag>
+            </div>
+          </div>
+        </div>
+        <el-divider>删除策略</el-divider>
+        <el-radio-group v-model="deleteStrategy">
+          <el-radio v-for="s in deleteImpactData.availableStrategies" :key="s.strategy" :value="s.strategy" :border="true">
+            {{ s.label }}
+            <el-tag v-if="s.recommended" size="small" type="success" style="margin-left: 4px">推荐</el-tag>
+          </el-radio>
+        </el-radio-group>
+        <div style="margin-top: 0.75rem">
+          <el-checkbox v-model="deleteNotify">删除前通知受影响的协作者</el-checkbox>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="deleteImpactDialog = false">取消</el-button>
+        <el-button type="danger" :loading="loading" @click="confirmDeleteWithStrategy">确认删除</el-button>
+      </template>
     </el-dialog>
 
     <el-dialog v-model="collectionPanelVisible" title="选择素材集" width="min(480px, 92vw)">
@@ -711,6 +810,46 @@ onMounted(async () => {
 .collection-count {
   color: var(--text-secondary);
   font-size: 0.82rem;
+}
+
+.delete-impact-content h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.affected-list {
+  margin-bottom: 1rem;
+}
+
+.affected-scroll {
+  max-height: 160px;
+  overflow-y: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 0.5rem;
+  background: #fafafa;
+}
+
+.affected-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.4rem;
+  border-radius: 6px;
+}
+
+.affected-item:hover {
+  background: rgba(26, 143, 91, 0.08);
+}
+
+.affected-item + .affected-item {
+  margin-top: 4px;
+}
+
+.affected-name {
+  flex: 1;
+  font-size: 0.88rem;
 }
 
 @media (max-width: 980px) {

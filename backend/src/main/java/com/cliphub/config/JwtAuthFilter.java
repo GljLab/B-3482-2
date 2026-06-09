@@ -37,13 +37,22 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
+        String token = null;
         String auth = request.getHeader(HttpHeaders.AUTHORIZATION);
-        if (auth == null || !auth.startsWith("Bearer ")) {
+        if (auth != null && auth.startsWith("Bearer ")) {
+            token = auth.substring(7);
+        }
+        if (token == null || token.isEmpty()) {
+            String qToken = request.getParameter("token");
+            if (qToken != null && !qToken.isEmpty()) {
+                token = qToken;
+            }
+        }
+        if (token == null || token.isEmpty()) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        String token = auth.substring(7);
         try {
             String key = "session:token:" + token;
             if (!Boolean.TRUE.equals(redisTemplate.hasKey(key))) {

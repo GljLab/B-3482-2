@@ -15,5 +15,11 @@ public class ProjectMaterialRel {
     private Long id;
     private Long projectId;
     private Long materialId;
+    private Long addedBy;
+    private LocalDateTime addedAt;
+    private String sourceType;
+    private String sourceNote;
+    private Long materialOwnerId;
+    private String materialStatus;
     private LocalDateTime createdAt;
 }

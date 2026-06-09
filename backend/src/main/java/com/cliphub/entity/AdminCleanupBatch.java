@@ -8,16 +8,18 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("collection_material_rel")
-public class CollectionMaterialRel {
+@TableName("admin_cleanup_batches")
+public class AdminCleanupBatch {
 
     @TableId(type = IdType.AUTO)
     private Long id;
-    private Long collectionId;
-    private Long materialId;
-    private Integer sortOrder;
-    private String note;
-    private Long addedBy;
-    private LocalDateTime addedAt;
+    private Long operatorId;
+    private String operatorName;
+    private Integer totalCount;
+    private Integer cleanedCount;
+    private Long totalBytes;
+    private String status;
+    private String materialIds;
     private LocalDateTime createdAt;
+    private LocalDateTime completedAt;
 }

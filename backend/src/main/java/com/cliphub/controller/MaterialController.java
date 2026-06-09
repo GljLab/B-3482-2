@@ -55,9 +55,13 @@ public class MaterialController {
     }
 
     @DeleteMapping("/{materialId}")
-    public ResponseEntity<ApiResponse<Void>> delete(@PathVariable Long materialId) {
-        materialService.delete(CurrentUserUtil.current(), materialId);
-        return ResponseEntity.ok(ApiResponse.ok("素材删除成功", null));
+    public ResponseEntity<ApiResponse<Map<String, Object>>> delete(@PathVariable Long materialId,
+                                                                   @RequestParam(defaultValue = "false") boolean force) {
+        if (force) {
+            materialService.delete(CurrentUserUtil.current(), materialId);
+            return ResponseEntity.ok(ApiResponse.ok("素材强制删除成功", null));
+        }
+        return ResponseEntity.ok(ApiResponse.ok("请使用 /api/traceability/materials/{id}/with-strategy 接口进行安全删除", null));
     }
 
     @PostMapping("/{materialId}/favorite")

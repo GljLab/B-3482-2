@@ -17,10 +17,12 @@ const menuItems = computed(() => {
     { path: '/materials', label: '素材中心', icon: 'FolderOpened' },
     { path: '/collections', label: '我的素材集', icon: 'Collection' },
     { path: '/projects', label: '项目工坊', icon: 'Film' },
+    { path: '/analytics', label: '数据分析', icon: 'DataAnalysis' },
+    { path: '/recycle-bin', label: '回收站', icon: 'Delete' },
     { path: '/profile', label: '个人中心', icon: 'User' }
   ];
   if (authStore.role === 'ADMIN') {
-    base.splice(4, 0, { path: '/admin', label: '系统治理', icon: 'Setting' });
+    base.splice(5, 0, { path: '/admin', label: '系统治理', icon: 'Setting' });
   }
   return base;
 });

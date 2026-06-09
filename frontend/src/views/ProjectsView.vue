@@ -1,7 +1,11 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import http from '../api/http';
+
+const router = useRouter();
+const openProjectDetail = (project) => router.push(`/projects/${project.id}/detail`);
 
 const loading = ref(false);
 const projects = ref([]);
@@ -203,6 +207,7 @@ onMounted(async () => {
         </div>
         <footer>
           <el-space wrap>
+            <el-button size="small" type="primary" plain @click="openProjectDetail(item)">详情溯源</el-button>
             <el-button size="small" plain @click="openVersionDialog(item.id)">保存版本</el-button>
             <el-button size="small" plain @click="openVersions(item.id)">版本列表</el-button>
             <el-button size="small" plain @click="exportProject(item)">导出</el-button>

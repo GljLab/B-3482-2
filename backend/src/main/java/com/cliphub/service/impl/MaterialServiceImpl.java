@@ -14,6 +14,7 @@ import com.cliphub.service.AuditLogService;
 import com.cliphub.service.MaterialService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,6 +45,8 @@ public class MaterialServiceImpl implements MaterialService {
     private final AuditLogService auditLogService;
     private final CollectionMaterialRelMapper collectionMaterialRelMapper;
     private final CollectionMapper collectionMapper;
+    @Lazy
+    private final TraceabilityServiceImpl traceabilitySvc;
 
     @Value("${app.storage.root}")
     private String storageRoot;
@@ -95,6 +98,13 @@ public class MaterialServiceImpl implements MaterialService {
         material.setUpdatedAt(LocalDateTime.now());
         materialMapper.insert(material);
 
+        material.setSourceType("USER_UPLOAD");
+        material.setOwnershipType("PERSONAL");
+        material.setIsDeleted(0);
+        material.setProjectUsageCount(0L);
+        material.setCollectionUsageCount(0L);
+        materialMapper.updateById(material);
+
         resetTags(material.getId(), request.getTagIds());
 
         auditLogService.log(principal, "UPLOAD_MATERIAL", "MATERIAL", String.valueOf(material.getId()),
@@ -107,6 +117,13 @@ public class MaterialServiceImpl implements MaterialService {
     public Material update(UserPrincipal principal, Long materialId, MaterialUpdateRequest request) {
         Material material = mustGet(materialId);
         ensureEditable(principal, material);
+
+        String oldTitle = material.getTitle();
+        String oldDescription = material.getDescription();
+        String oldVisibility = material.getVisibility();
+        Long oldCategoryId = material.getCategoryId();
+        Integer oldDurationSeconds = material.getDurationSeconds();
+        String oldResolution = material.getResolution();
 
         if (StringUtils.hasText(request.getTitle())) {
             material.setTitle(request.getTitle());
@@ -127,6 +144,19 @@ public class MaterialServiceImpl implements MaterialService {
             material.setResolution(request.getResolution());
         }
         material.setUpdatedAt(LocalDateTime.now());
+
+        traceabilitySvc.logModification(material.getId(), principal, "title",
+                oldTitle != null ? oldTitle : "", material.getTitle() != null ? material.getTitle() : "");
+        traceabilitySvc.logModification(material.getId(), principal, "description",
+                oldDescription != null ? oldDescription : "", material.getDescription() != null ? material.getDescription() : "");
+        traceabilitySvc.logModification(material.getId(), principal, "visibility",
+                oldVisibility != null ? oldVisibility : "", material.getVisibility() != null ? material.getVisibility() : "");
+        traceabilitySvc.logModification(material.getId(), principal, "categoryId",
+                oldCategoryId != null ? String.valueOf(oldCategoryId) : "", material.getCategoryId() != null ? String.valueOf(material.getCategoryId()) : "");
+        traceabilitySvc.logModification(material.getId(), principal, "durationSeconds",
+                oldDurationSeconds != null ? String.valueOf(oldDurationSeconds) : "", material.getDurationSeconds() != null ? String.valueOf(material.getDurationSeconds()) : "");
+        traceabilitySvc.logModification(material.getId(), principal, "resolution",
+                oldResolution != null ? oldResolution : "", material.getResolution() != null ? material.getResolution() : "");
 
         materialMapper.updateById(material);
         if (request.getTagIds() != null) {
@@ -263,6 +293,7 @@ public class MaterialServiceImpl implements MaterialService {
             material.setUpdatedAt(LocalDateTime.now());
             materialMapper.updateById(material);
             favorited = true;
+            traceabilitySvc.logTrail(materialId, principal, "FAVORITE", "INTERACTION", null, null, "收藏素材", null, null);
         } else {
             favoriteMapper.deleteById(existed.getId());
             long current = Optional.ofNullable(material.getFavoriteCount()).orElse(0L);
@@ -270,6 +301,7 @@ public class MaterialServiceImpl implements MaterialService {
             material.setUpdatedAt(LocalDateTime.now());
             materialMapper.updateById(material);
             favorited = false;
+            traceabilitySvc.logTrail(materialId, principal, "UNFAVORITE", "INTERACTION", null, null, "取消收藏", null, null);
         }
 
         auditLogService.log(principal, favorited ? "FAVORITE_MATERIAL" : "UNFAVORITE_MATERIAL",
@@ -293,6 +325,8 @@ public class MaterialServiceImpl implements MaterialService {
         shareLink.setExpireAt(LocalDateTime.now().plusHours(Math.max(1, request.getExpireHours())));
         shareLink.setCreatedAt(LocalDateTime.now());
         shareLinkMapper.insert(shareLink);
+
+        traceabilitySvc.logTrail(materialId, principal, "SHARE", "SHARING", null, null, "创建分享链接", null, null);
 
         material.setShareCount(Optional.ofNullable(material.getShareCount()).orElse(0L) + 1);
         material.setUpdatedAt(LocalDateTime.now());
@@ -357,6 +391,8 @@ public class MaterialServiceImpl implements MaterialService {
         material.setDownloadCount(Optional.ofNullable(material.getDownloadCount()).orElse(0L) + 1);
         material.setUpdatedAt(LocalDateTime.now());
         materialMapper.updateById(material);
+
+        traceabilitySvc.logTrail(materialId, principal, "DOWNLOAD", "LIFECYCLE", null, null, "下载素材", null, null);
 
         auditLogService.log(principal, "DOWNLOAD_MATERIAL", "MATERIAL", String.valueOf(materialId),
                 "下载素材 quality=" + quality + ", format=" + format);
