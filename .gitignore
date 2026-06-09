@@ -1,0 +1,11 @@
+.DS_Store
+.idea
+.vscode
+node_modules
+dist
+build
+backend/target
+backend/.mvn
+frontend/.vite
+frontend/node_modules
+frontend/dist
