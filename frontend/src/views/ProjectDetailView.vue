@@ -61,15 +61,34 @@ const filteredMaterials = computed(() => {
   return list;
 });
 
+const versions = ref([]);
+
 const loadProject = async () => {
   loading.value = true;
   try {
-    const res = await http.get(`/projects/${projectId.value}`);
-    project.value = res?.data || {};
-    materials.value = (res?.data?.materials || []).map(m => ({
+    const invRes = await traceApi.getProjectInventory(projectId.value);
+    const inv = invRes?.data || {};
+    const activeMaterials = inv.materials || [];
+    const deletedMaterials = inv.deletedMaterials || [];
+    const all = [...activeMaterials, ...deletedMaterials].map((m) => ({
       ...m,
-      deleted: m.deleted || m.status === 'DELETED'
+      deleted: m.deleted || m.status === 'DELETED' || inv.deletedMaterials?.includes(m)
     }));
+    project.value = {
+      id: inv.projectId,
+      name: inv.projectName || `项目 #${inv.projectId}`,
+      description: inv.description || '',
+      totalCount: inv.totalCount || 0,
+      activeCount: inv.activeCount || 0,
+      deletedCount: inv.deletedCount || 0,
+      sourceBreakdown: inv.sourceBreakdown || {},
+      status: 'ACTIVE',
+      materials: all
+    };
+    materials.value = all;
+    contributors.value = inv.contributors || [];
+  } catch (e) {
+    console.warn('项目清单加载失败', e);
   } finally {
     loading.value = false;
   }
@@ -134,7 +153,24 @@ const submitCopy = async () => {
 const openRollbackCheck = async () => {
   loading.value = true;
   try {
-    const res = await traceApi.rollbackCheck(projectId.value);
+    let versionList = versions.value;
+    if (!versionList || versionList.length === 0) {
+      try {
+        const vRes = await http.get(`/projects/${projectId.value}/versions`);
+        versionList = vRes?.data || [];
+        versions.value = versionList;
+      } catch (e) {
+        versionList = [];
+      }
+    }
+    if (!versionList || versionList.length === 0) {
+      rollbackResult.value = { available: true, note: '项目尚未保存版本，无需检查' };
+      rollbackDialog.value = true;
+      return;
+    }
+    const latest = versionList[versionList.length - 1];
+    const vid = latest.id || latest.versionId;
+    const res = await traceApi.rollbackCheck(projectId.value, vid);
     rollbackResult.value = res?.data || null;
     rollbackDialog.value = true;
   } finally {

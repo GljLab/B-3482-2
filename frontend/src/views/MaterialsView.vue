@@ -220,7 +220,7 @@ const deleteStrategy = ref('RECYCLE');
 const deleteNotify = ref(false);
 
 const openDetail = (row) => {
-  router.push(`/materials/${row.id}/detail`);
+  router.push(`/materials/${row.id}`);
 };
 
 const safeDeleteMaterial = async (row) => {
